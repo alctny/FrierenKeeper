@@ -74,20 +74,70 @@ func ShowPasswords(ps []Password) {
 	fmt.Print(text.String())
 }
 
-func DecryptPasswords(ps []Password, keyFile string) []Password {
+func DecryptPasswords(ps []Password, keyFile string) ([]Password, error) {
 	result := []Password{}
-	keyByte := FileHash256(keyFile)
+	var err error
+
 	for _, p := range ps {
-		if p.Encrypt == 1 {
-			p.Encrypt = 0
-			p.Password = Decrypt(p.Password, keyByte)
-			p.LoginId = Decrypt(p.LoginId, keyByte)
-			if p.Bind != "" {
-				p.Bind = Decrypt(p.Bind, keyByte)
+		if p.Encrypt == 0 {
+			result = append(result, p)
+			continue
+		}
+
+		p.Encrypt = 0
+		p.Password, err = DecryptString(p.Password, keyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		p.LoginId, err = DecryptString(p.LoginId, keyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		if p.Bind != "" {
+			p.Bind, err = DecryptString(p.Bind, keyFile)
+			if err != nil {
+				return nil, err
 			}
 		}
+
 		result = append(result, p)
 	}
 
-	return result
+	return result, nil
+}
+
+func EncryptPasswords(ps []Password, keyFile string) ([]Password, error) {
+	result := []Password{}
+	var err error
+
+	for _, p := range ps {
+		if p.Encrypt == 0 {
+			result = append(result, p)
+			continue
+		}
+
+		p.Encrypt = 0
+		p.Password, err = EncrypeString(p.Password, keyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		p.LoginId, err = EncrypeString(p.LoginId, keyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		if p.Bind != "" {
+			p.Bind, err = EncrypeString(p.Bind, keyFile)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		result = append(result, p)
+	}
+
+	return result, nil
 }

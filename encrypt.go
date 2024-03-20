@@ -5,63 +5,61 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"os"
 )
 
 // TODO: 添加到生成的密文当中，且每次随机生成
-var iv = []byte{0xa3, 0x38, 0x9e, 0x48, 0xb5, 0xe6, 0xba, 0x4, 0xca, 0xd4, 0xcb, 0x47, 0x88, 0xa5, 0xc5, 0x41}
-
-// 因为是命令行程序，所以遇到错误直接退出，不进行其他行为
-func ErrorWithEixt(err error) {
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-// 使用 aes256 进行加密，key 长度必须是 32
-func Encrypt(msg string, key []byte) []byte {
-	if len(key) < 32 {
-		ErrorWithEixt(errors.New("key is too short"))
-	}
-
-	block, err := aes.NewCipher(key)
-	ErrorWithEixt(err)
-	ciphertext := make([]byte, aes.BlockSize+len(msg))
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(ciphertext[aes.BlockSize:], []byte(msg))
-
-	return ciphertext
-}
-
-// 对密文进行 aes256 解密
-func Decrypt(msgg string, key []byte) string {
-	msg, err := hex.DecodeString(msgg)
-	ErrorWithEixt(err)
-	if len(key) < 32 {
-		ErrorWithEixt(errors.New("key is too short"))
-	}
-
-	block, err := aes.NewCipher(key)
-	ErrorWithEixt(err)
-	plaintext := make([]byte, len(msg)-aes.BlockSize)
-	stream := cipher.NewCFBDecrypter(block, iv)
-	stream.XORKeyStream(plaintext, msg[aes.BlockSize:])
-
-	return string(plaintext)
-}
+var _iv = []byte{0xa3, 0x38, 0x9e, 0x48, 0xb5, 0xe6, 0xba, 0x4, 0xca, 0xd4, 0xcb, 0x47, 0x88, 0xa5, 0xc5, 0x41}
 
 // 计算文件 sha256sum 作为密钥
-func FileHash256(file string) []byte {
+func FileHash256(file string) ([]byte, error) {
 	f, err := os.Open(file)
-	ErrorWithEixt(err)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
 
 	hash := sha256.New()
 	_, err = f.WriteTo(hash)
-	ErrorWithEixt(err)
+	if err != nil {
+		return nil, err
+	}
 
-	hashByte := hash.Sum(nil)
-	return hashByte
+	return hash.Sum(nil), nil
+}
+
+func EncrypeString(msg string, keyFile string) (string, error) {
+	keyByte, err := FileHash256(keyFile)
+	if err != nil {
+		return "", err
+	}
+	msgByte := []byte(msg)
+	block, err := aes.NewCipher(keyByte)
+	if err != nil {
+		return "", err
+	}
+	ciphertext := make([]byte, aes.BlockSize+len(msgByte))
+	stream := cipher.NewCFBEncrypter(block, _iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], msgByte)
+	return hex.EncodeToString(ciphertext), nil
+}
+
+func DecryptString(msg string, keyFile string) (string, error) {
+	passwordByte, err := hex.DecodeString(msg)
+	if err != nil {
+		return "", err
+	}
+	keyByte, err := FileHash256(keyFile)
+	if err != nil {
+		return "", err
+	}
+
+	block, err := aes.NewCipher(keyByte)
+	if err != nil {
+		return "", err
+	}
+	plaintext := make([]byte, len(passwordByte)-aes.BlockSize)
+	stream := cipher.NewCFBDecrypter(block, _iv)
+	stream.XORKeyStream(plaintext, passwordByte[aes.BlockSize:])
+	return string(plaintext), nil
 }

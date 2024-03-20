@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/csv"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"os"
@@ -132,7 +131,7 @@ func init() {
 		},
 		{
 			Name:   "import",
-			Usage:  "import passwords from csv",
+			Usage:  "import passwords from csv, the csv file format: name,loginId,password,bind,alias,site,comment",
 			Action: importFromCsv,
 			Flags: []cli.Flag{
 				&cli.PathFlag{
@@ -181,6 +180,30 @@ func init() {
 			},
 		},
 		{
+			Name:   "cover",
+			Usage:  "encrypt local file",
+			Action: cover,
+			Flags: []cli.Flag{
+				&cli.PathFlag{
+					Name:     "key",
+					Usage:    "path to key file",
+					Required: true,
+				},
+			},
+		},
+		{
+			Name:   "decover",
+			Usage:  "decrypt local file",
+			Action: decover,
+			Flags: []cli.Flag{
+				&cli.PathFlag{
+					Name:     "key",
+					Usage:    "path to key file",
+					Required: true,
+				},
+			},
+		},
+		{
 			Name:   "gen",
 			Usage:  "generate password",
 			Action: generate,
@@ -212,13 +235,25 @@ func add(ctx *cli.Context) error {
 	comment := ctx.String("comment")
 	isEncrype := 0
 
+	var err error
 	if keyFile != "" {
 		isEncrype = 1
-		keyByte := FileHash256(keyFile)
-		password = hex.EncodeToString(Encrypt(password, keyByte))
-		loginId = hex.EncodeToString(Encrypt(loginId, keyByte))
+
+		password, err = EncrypeString(password, keyFile)
+		if err != nil {
+			return err
+		}
+
+		loginId, err = EncrypeString(loginId, keyFile)
+		if err != nil {
+			return err
+		}
+
 		if bind != "" {
-			bind = hex.EncodeToString(Encrypt(bind, keyByte))
+			bind, err = EncrypeString(bind, keyFile)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -234,7 +269,9 @@ func add(ctx *cli.Context) error {
 	}
 
 	tx := db.Create(&passwd)
-	ErrorWithEixt(tx.Error)
+	if tx.Error != nil {
+		return tx.Error
+	}
 	fmt.Println("add password success")
 	return nil
 }
@@ -247,14 +284,19 @@ func get(ctx *cli.Context) error {
 	query := fmt.Sprintf("%%%s%%", ctx.Args().First())
 	passwords := []Password{}
 	tx := db.Where("name LIKE ? OR site LIKE ? OR comment LIKE ? OR alias LIKE ?", query, query, query, query).Find(&passwords)
-	ErrorWithEixt(tx.Error)
+	if tx.Error != nil {
+		return tx.Error
+	}
 
 	keyFile := ctx.Path("key")
 	if keyFile != "" {
-		passwords = DecryptPasswords(passwords, keyFile)
+		var err error
+		passwords, err = DecryptPasswords(passwords, keyFile)
+		if err != nil {
+			return err
+		}
 	}
 	ShowPasswords(passwords)
-
 	return nil
 }
 
@@ -264,9 +306,15 @@ func list(ctx *cli.Context) error {
 	keyFile := ctx.String("key")
 
 	tx := db.Find(&passwords)
-	ErrorWithEixt(tx.Error)
+	if tx.Error != nil {
+		return tx.Error
+	}
 	if keyFile != "" {
-		passwords = DecryptPasswords(passwords, keyFile)
+		var err error
+		passwords, err = DecryptPasswords(passwords, keyFile)
+		if err != nil {
+			return err
+		}
 	}
 
 	ShowPasswords(passwords)
@@ -281,7 +329,9 @@ func update(ctx *cli.Context) error {
 	}
 	idStr := ctx.Args().First()
 	id, err := strconv.Atoi(idStr)
-	ErrorWithEixt(err)
+	if err != nil {
+		return err
+	}
 
 	name := ctx.String("name")
 	loginId := ctx.String("loginid")
@@ -295,15 +345,25 @@ func update(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
 	if keyFile != "" {
 		isEncrype = 1
-		keyByte := FileHash256(keyFile)
 		if password != "" {
-			password = hex.EncodeToString(Encrypt(password, keyByte))
+			password, err = EncrypeString(password, keyFile)
+			if err != nil {
+				return err
+			}
 		}
+
 		if loginId != "" {
-			loginId = hex.EncodeToString(Encrypt(loginId, keyByte))
+			loginId, err = EncrypeString(loginId, keyFile)
+			if err != nil {
+				return err
+			}
 		}
+
 		if bind != "" {
-			bind = hex.EncodeToString(Encrypt(bind, keyByte))
+			bind, err = EncrypeString(bind, keyFile)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -321,8 +381,10 @@ func update(ctx *cli.Context) error {
 	// 此处必须添加 encrypt = isEncrype 条件，保证修改前后加密状态未发生改变
 	// 避免出现所有信息都没有加密但 encrypt = 1 或所有信息都有加密但 encrypt = 0 的情况
 	tx := db.Model(&Password{}).Where("id = ? AND encrypt = ?", id, isEncrype).Updates(p)
+	if tx.Error != nil {
+		return tx.Error
+	}
 
-	ErrorWithEixt(tx.Error)
 	fmt.Println("update password success")
 	return nil
 }
@@ -334,9 +396,13 @@ func remove(ctx *cli.Context) error {
 	}
 	idStr := ctx.Args().First()
 	id, err := strconv.Atoi(idStr)
-	ErrorWithEixt(err)
+	if err != nil {
+		return err
+	}
 	tx := db.Delete(&Password{Id: id})
-	ErrorWithEixt(tx.Error)
+	if tx.Error != nil {
+		return tx.Error
+	}
 	fmt.Println("remove password success")
 	return nil
 }
@@ -349,19 +415,19 @@ func importFromCsv(ctx *cli.Context) error {
 	}
 	csvFile := ctx.Args().First()
 	f, err := os.Open(csvFile)
-	ErrorWithEixt(err)
+	if err != nil {
+		return err
+	}
 	defer f.Close()
 	data, err := csv.NewReader(f).ReadAll()
-	ErrorWithEixt(err)
+	if err != nil {
+		return err
+	}
 	if len(data) < 1 {
 		return nil
 	}
 
 	keyFile := ctx.Path("key")
-	var keyByte []byte
-	if keyFile != "" {
-		keyByte = FileHash256(keyFile)
-	}
 
 	if len(data[0]) < 7 {
 		return fmt.Errorf("csv format error, should be 'name,loginId,password,bind,alias,site,comment', and no header")
@@ -379,16 +445,25 @@ func importFromCsv(ctx *cli.Context) error {
 		}
 		if keyFile != "" {
 			p.Encrypt = 1
-			p.Password = hex.EncodeToString(Encrypt(p.Password, keyByte))
-			p.LoginId = hex.EncodeToString(Encrypt(p.LoginId, keyByte))
-			if p.Bind != "" {
-				p.Bind = hex.EncodeToString(Encrypt(p.Bind, keyByte))
+			p.Password, err = EncrypeString(p.Password, keyFile)
+			if err != nil {
+				return err
+			}
+			p.LoginId, err = EncrypeString(p.LoginId, keyFile)
+			if err != nil {
+				return err
+			}
+			p.Bind, err = EncrypeString(p.Bind, keyFile)
+			if err != nil {
+				return err
 			}
 		}
 		passwords = append(passwords, p)
 	}
 	tx := db.Create(&passwords)
-	ErrorWithEixt(tx.Error)
+	if err != nil {
+		return err
+	}
 	fmt.Println("import passwords success: ", tx.RowsAffected)
 	return nil
 }
@@ -400,11 +475,19 @@ func export2Csv(ctx *cli.Context) error {
 	passwords := []Password{}
 	if keyFile != "" {
 		tx := db.Find(&passwords)
-		ErrorWithEixt(tx.Error)
-		passwords = DecryptPasswords(passwords, keyFile)
+		if tx.Error != nil {
+			return tx.Error
+		}
+		var err error
+		passwords, err = DecryptPasswords(passwords, keyFile)
+		if err != nil {
+			return err
+		}
 	} else {
 		tx := db.Where("encrypt = 0").Find(&passwords)
-		ErrorWithEixt(tx.Error)
+		if tx.Error != nil {
+			return tx.Error
+		}
 	}
 
 	outputFile := ctx.Path("output")
@@ -412,7 +495,9 @@ func export2Csv(ctx *cli.Context) error {
 		outputFile = "output.csv"
 	}
 	f, err := os.Create(outputFile)
-	ErrorWithEixt(err)
+	if err != nil {
+		return err
+	}
 	defer f.Close()
 	csvWriter := csv.NewWriter(f)
 	defer csvWriter.Flush()
@@ -428,16 +513,25 @@ func decryptAll(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
 	passwords := []Password{}
 	tx := db.Where(&Password{Encrypt: 1}).Find(&passwords)
-	ErrorWithEixt(tx.Error)
-	passwords = DecryptPasswords(passwords, keyFile)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	var err error
+	passwords, err = DecryptPasswords(passwords, keyFile)
+	if err != nil {
+		return err
+	}
 	tx = db.Begin()
 	for _, p := range passwords {
 		result := tx.Save(&p)
-		ErrorWithEixt(result.Error)
+		if result.Error != nil {
+			return result.Error
+		}
 	}
 	tx = tx.Commit()
-	// if tx.Error == gorm.errtab
-	ErrorWithEixt(tx.Error)
+	if tx.Error != nil {
+		return tx.Error
+	}
 	fmt.Println("decrypt success")
 
 	return nil
@@ -446,23 +540,38 @@ func decryptAll(ctx *cli.Context) error {
 // encrypt all passwors, loginId, bind
 func encryptAll(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
-	keyByte := FileHash256(keyFile)
 	passwords := []Password{}
 	tx := db.Where("encrypt = 0").Find(&passwords)
-	ErrorWithEixt(tx.Error)
+	if tx.Error != nil {
+		return tx.Error
+	}
 	tx = db.Begin()
+	var err error
 	for _, p := range passwords {
-		p.Password = hex.EncodeToString(Encrypt(p.Password, keyByte))
-		p.LoginId = hex.EncodeToString(Encrypt(p.LoginId, keyByte))
-		if p.Bind != "" {
-			p.Bind = hex.EncodeToString(Encrypt(p.Bind, keyByte))
+		p.Password, err = EncrypeString(p.Password, keyFile)
+		if err != nil {
+			return err
+		}
+
+		p.LoginId, err = EncrypeString(p.LoginId, keyFile)
+		if err != nil {
+			return err
+		}
+
+		p.Bind, err = EncrypeString(p.Bind, keyFile)
+		if err != nil {
+			return err
 		}
 		p.Encrypt = 1
 		result := tx.Save(p)
-		ErrorWithEixt(result.Error)
+		if result.Error != nil {
+			return result.Error
+		}
 	}
 	tx = tx.Commit()
-	ErrorWithEixt(tx.Error)
+	if tx.Error != nil {
+		return tx.Error
+	}
 	fmt.Println("encrypt success")
 
 	return nil
@@ -510,3 +619,7 @@ func generate(ctx *cli.Context) error {
 	fmt.Println("gen: ", string(passwords))
 	return nil
 }
+
+func cover(ctx *cli.Context) error { return nil }
+
+func decover(ctx *cli.Context) error { return nil }

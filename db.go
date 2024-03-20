@@ -11,14 +11,20 @@ import (
 
 func init() {
 	user, err := user.Current()
-	ErrorWithEixt(err)
+	if err != nil {
+		panic(err)
+	}
 	dbPath := fmt.Sprintf("%s/%s", user.HomeDir, ".gokeeper.db")
 	db, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
 	})
-	ErrorWithEixt(err)
+	if err != nil {
+		panic(err)
+	}
 	err = db.AutoMigrate(&Password{})
-	ErrorWithEixt(err)
+	if err != nil {
+		panic(err)
+	}
 }
