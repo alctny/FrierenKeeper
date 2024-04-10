@@ -1,9 +1,10 @@
-package main
+package model
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/alctny/frieren-keeper/util"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -85,18 +86,18 @@ func DecryptPasswords(ps []Password, keyFile string) ([]Password, error) {
 		}
 
 		p.Encrypt = 0
-		p.Password, err = DecryptString(p.Password, keyFile)
+		p.Password, err = util.DecryptString(p.Password, keyFile)
 		if err != nil {
 			return nil, err
 		}
 
-		p.LoginId, err = DecryptString(p.LoginId, keyFile)
+		p.LoginId, err = util.DecryptString(p.LoginId, keyFile)
 		if err != nil {
 			return nil, err
 		}
 
 		if p.Bind != "" {
-			p.Bind, err = DecryptString(p.Bind, keyFile)
+			p.Bind, err = util.DecryptString(p.Bind, keyFile)
 			if err != nil {
 				return nil, err
 			}
@@ -119,18 +120,18 @@ func EncryptPasswords(ps []Password, keyFile string) ([]Password, error) {
 		}
 
 		p.Encrypt = 0
-		p.Password, err = EncrypeString(p.Password, keyFile)
+		p.Password, err = util.EncrypeString(p.Password, keyFile)
 		if err != nil {
 			return nil, err
 		}
 
-		p.LoginId, err = EncrypeString(p.LoginId, keyFile)
+		p.LoginId, err = util.EncrypeString(p.LoginId, keyFile)
 		if err != nil {
 			return nil, err
 		}
 
 		if p.Bind != "" {
-			p.Bind, err = EncrypeString(p.Bind, keyFile)
+			p.Bind, err = util.EncrypeString(p.Bind, keyFile)
 			if err != nil {
 				return nil, err
 			}

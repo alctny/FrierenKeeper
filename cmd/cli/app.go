@@ -8,8 +8,22 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/alctny/frieren-keeper/dao"
+	"github.com/alctny/frieren-keeper/model"
+	"github.com/alctny/frieren-keeper/util"
 	"github.com/urfave/cli/v2"
+	"gorm.io/gorm"
 )
+
+var VERSION = "0.3.1"
+var app = cli.NewApp()
+var db *gorm.DB
+
+func main() {
+	if err := app.Run(os.Args); err != nil {
+		panic(err)
+	}
+}
 
 func init() {
 	app.Commands = []*cli.Command{
@@ -182,7 +196,7 @@ func init() {
 		{
 			Name:   "cover",
 			Usage:  "encrypt local file",
-			Action: cover,
+			Action: lsbCover,
 			Flags: []cli.Flag{
 				&cli.PathFlag{
 					Name:     "key",
@@ -194,7 +208,7 @@ func init() {
 		{
 			Name:   "decover",
 			Usage:  "decrypt local file",
-			Action: decover,
+			Action: deLsbCover,
 			Flags: []cli.Flag{
 				&cli.PathFlag{
 					Name:     "key",
@@ -215,11 +229,13 @@ func init() {
 	app.EnableBashCompletion = true
 	app.Name = "gokeeper"
 	app.Authors = []*cli.Author{{Name: "Alctny", Email: "ltozvxe@gmail.com"}}
+
+	db = dao.NewGormDB()
 }
 
 // create sqlite file and create table
 func initDB(ctx *cli.Context) error {
-	db.AutoMigrate(&Password{})
+	db.AutoMigrate(&model.Password{})
 	return db.Error
 }
 
@@ -239,25 +255,25 @@ func add(ctx *cli.Context) error {
 	if keyFile != "" {
 		isEncrype = 1
 
-		password, err = EncrypeString(password, keyFile)
+		password, err = util.EncrypeString(password, keyFile)
 		if err != nil {
 			return err
 		}
 
-		loginId, err = EncrypeString(loginId, keyFile)
+		loginId, err = util.EncrypeString(loginId, keyFile)
 		if err != nil {
 			return err
 		}
 
 		if bind != "" {
-			bind, err = EncrypeString(bind, keyFile)
+			bind, err = util.EncrypeString(bind, keyFile)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	passwd := Password{
+	passwd := model.Password{
 		Name:     name,
 		LoginId:  loginId,
 		Password: password,
@@ -282,7 +298,7 @@ func get(ctx *cli.Context) error {
 		return fmt.Errorf("query is empty")
 	}
 	query := fmt.Sprintf("%%%s%%", ctx.Args().First())
-	passwords := []Password{}
+	passwords := []model.Password{}
 	tx := db.Where("name LIKE ? OR site LIKE ? OR comment LIKE ? OR alias LIKE ?", query, query, query, query).Find(&passwords)
 	if tx.Error != nil {
 		return tx.Error
@@ -291,18 +307,18 @@ func get(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
 	if keyFile != "" {
 		var err error
-		passwords, err = DecryptPasswords(passwords, keyFile)
+		passwords, err = model.DecryptPasswords(passwords, keyFile)
 		if err != nil {
 			return err
 		}
 	}
-	ShowPasswords(passwords)
+	model.ShowPasswords(passwords)
 	return nil
 }
 
 // list all passwords
 func list(ctx *cli.Context) error {
-	passwords := []Password{}
+	passwords := []model.Password{}
 	keyFile := ctx.String("key")
 
 	tx := db.Find(&passwords)
@@ -311,13 +327,13 @@ func list(ctx *cli.Context) error {
 	}
 	if keyFile != "" {
 		var err error
-		passwords, err = DecryptPasswords(passwords, keyFile)
+		passwords, err = model.DecryptPasswords(passwords, keyFile)
 		if err != nil {
 			return err
 		}
 	}
 
-	ShowPasswords(passwords)
+	model.ShowPasswords(passwords)
 	return nil
 }
 
@@ -346,28 +362,28 @@ func update(ctx *cli.Context) error {
 	if keyFile != "" {
 		isEncrype = 1
 		if password != "" {
-			password, err = EncrypeString(password, keyFile)
+			password, err = util.EncrypeString(password, keyFile)
 			if err != nil {
 				return err
 			}
 		}
 
 		if loginId != "" {
-			loginId, err = EncrypeString(loginId, keyFile)
+			loginId, err = util.EncrypeString(loginId, keyFile)
 			if err != nil {
 				return err
 			}
 		}
 
 		if bind != "" {
-			bind, err = EncrypeString(bind, keyFile)
+			bind, err = util.EncrypeString(bind, keyFile)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	p := Password{
+	p := model.Password{
 		Id:       id,
 		Name:     name,
 		LoginId:  loginId,
@@ -380,7 +396,7 @@ func update(ctx *cli.Context) error {
 	}
 	// 此处必须添加 encrypt = isEncrype 条件，保证修改前后加密状态未发生改变
 	// 避免出现所有信息都没有加密但 encrypt = 1 或所有信息都有加密但 encrypt = 0 的情况
-	tx := db.Model(&Password{}).Where("id = ? AND encrypt = ?", id, isEncrype).Updates(p)
+	tx := db.Model(&model.Password{}).Where("id = ? AND encrypt = ?", id, isEncrype).Updates(p)
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -399,7 +415,7 @@ func remove(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	tx := db.Delete(&Password{Id: id})
+	tx := db.Delete(&model.Password{Id: id})
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -419,22 +435,22 @@ func importFromCsv(ctx *cli.Context) error {
 		return err
 	}
 	defer f.Close()
-	data, err := csv.NewReader(f).ReadAll()
+	csvData, err := csv.NewReader(f).ReadAll()
 	if err != nil {
 		return err
 	}
-	if len(data) < 1 {
+	if len(csvData) < 1 {
 		return nil
 	}
 
 	keyFile := ctx.Path("key")
 
-	if len(data[0]) < 7 {
+	if len(csvData[0]) < 7 {
 		return fmt.Errorf("csv format error, should be 'name,loginId,password,bind,alias,site,comment', and no header")
 	}
-	passwords := []Password{}
-	for _, line := range data[1:] {
-		p := Password{
+	passwords := []model.Password{}
+	for _, line := range csvData[1:] {
+		p := model.Password{
 			Name:     line[0],
 			LoginId:  line[1],
 			Password: line[2],
@@ -445,15 +461,15 @@ func importFromCsv(ctx *cli.Context) error {
 		}
 		if keyFile != "" {
 			p.Encrypt = 1
-			p.Password, err = EncrypeString(p.Password, keyFile)
+			p.Password, err = util.EncrypeString(p.Password, keyFile)
 			if err != nil {
 				return err
 			}
-			p.LoginId, err = EncrypeString(p.LoginId, keyFile)
+			p.LoginId, err = util.EncrypeString(p.LoginId, keyFile)
 			if err != nil {
 				return err
 			}
-			p.Bind, err = EncrypeString(p.Bind, keyFile)
+			p.Bind, err = util.EncrypeString(p.Bind, keyFile)
 			if err != nil {
 				return err
 			}
@@ -472,14 +488,14 @@ func importFromCsv(ctx *cli.Context) error {
 // TODO: export to csv
 func export2Csv(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
-	passwords := []Password{}
+	passwords := []model.Password{}
 	if keyFile != "" {
 		tx := db.Find(&passwords)
 		if tx.Error != nil {
 			return tx.Error
 		}
 		var err error
-		passwords, err = DecryptPasswords(passwords, keyFile)
+		passwords, err = model.DecryptPasswords(passwords, keyFile)
 		if err != nil {
 			return err
 		}
@@ -511,13 +527,13 @@ func export2Csv(ctx *cli.Context) error {
 // decrypt all passwors, loginId, bind
 func decryptAll(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
-	passwords := []Password{}
-	tx := db.Where(&Password{Encrypt: 1}).Find(&passwords)
+	passwords := []model.Password{}
+	tx := db.Where(&model.Password{Encrypt: 1}).Find(&passwords)
 	if tx.Error != nil {
 		return tx.Error
 	}
 	var err error
-	passwords, err = DecryptPasswords(passwords, keyFile)
+	passwords, err = model.DecryptPasswords(passwords, keyFile)
 	if err != nil {
 		return err
 	}
@@ -540,7 +556,7 @@ func decryptAll(ctx *cli.Context) error {
 // encrypt all passwors, loginId, bind
 func encryptAll(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
-	passwords := []Password{}
+	passwords := []model.Password{}
 	tx := db.Where("encrypt = 0").Find(&passwords)
 	if tx.Error != nil {
 		return tx.Error
@@ -548,17 +564,17 @@ func encryptAll(ctx *cli.Context) error {
 	tx = db.Begin()
 	var err error
 	for _, p := range passwords {
-		p.Password, err = EncrypeString(p.Password, keyFile)
+		p.Password, err = util.EncrypeString(p.Password, keyFile)
 		if err != nil {
 			return err
 		}
 
-		p.LoginId, err = EncrypeString(p.LoginId, keyFile)
+		p.LoginId, err = util.EncrypeString(p.LoginId, keyFile)
 		if err != nil {
 			return err
 		}
 
-		p.Bind, err = EncrypeString(p.Bind, keyFile)
+		p.Bind, err = util.EncrypeString(p.Bind, keyFile)
 		if err != nil {
 			return err
 		}
@@ -620,6 +636,6 @@ func generate(ctx *cli.Context) error {
 	return nil
 }
 
-func cover(ctx *cli.Context) error { return nil }
+func lsbCover(ctx *cli.Context) error { return nil }
 
-func decover(ctx *cli.Context) error { return nil }
+func deLsbCover(ctx *cli.Context) error { return nil }
