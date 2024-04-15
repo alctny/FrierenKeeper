@@ -3,20 +3,19 @@ package main
 import (
 	"fmt"
 
-	"github.com/alctny/frieren-keeper/model"
 	"github.com/urfave/cli/v2"
 )
 
 // decrypt all passwors, loginId, bind
 func decryptAll(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
-	passwords := []model.Password{}
-	tx := db.Where(&model.Password{Encrypt: 1}).Find(&passwords)
+	passwords := []Password{}
+	tx := db.Where(&Password{Encrypt: 1}).Find(&passwords)
 	if tx.Error != nil {
 		return tx.Error
 	}
 	var err error
-	passwords, err = model.DecryptPasswords(passwords, keyFile)
+	passwords, err = DecryptPasswords(passwords, keyFile)
 	if err != nil {
 		return err
 	}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/alctny/frieren-keeper/model"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,7 +17,7 @@ func remove(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	tx := db.Delete(&model.Password{Id: id})
+	tx := db.Delete(&Password{Id: id})
 	if tx.Error != nil {
 		return tx.Error
 	}

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/alctny/frieren-keeper/model"
-	"github.com/alctny/frieren-keeper/util"
 	"github.com/urfave/cli/v2"
 )
 
@@ -35,9 +33,9 @@ func importFromCsv(ctx *cli.Context) error {
 	if len(csvData[0]) < 7 {
 		return fmt.Errorf("csv format error, should be 'name,loginId,password,bind,alias,site,comment', and no header")
 	}
-	passwords := []model.Password{}
+	passwords := []Password{}
 	for _, line := range csvData[1:] {
-		p := model.Password{
+		p := Password{
 			Name:     line[0],
 			LoginId:  line[1],
 			Password: line[2],
@@ -48,15 +46,15 @@ func importFromCsv(ctx *cli.Context) error {
 		}
 		if keyFile != "" {
 			p.Encrypt = 1
-			p.Password, err = util.EncrypeString(p.Password, keyFile)
+			p.Password, err = EncrypeString(p.Password, keyFile)
 			if err != nil {
 				return err
 			}
-			p.LoginId, err = util.EncrypeString(p.LoginId, keyFile)
+			p.LoginId, err = EncrypeString(p.LoginId, keyFile)
 			if err != nil {
 				return err
 			}
-			p.Bind, err = util.EncrypeString(p.Bind, keyFile)
+			p.Bind, err = EncrypeString(p.Bind, keyFile)
 			if err != nil {
 				return err
 			}

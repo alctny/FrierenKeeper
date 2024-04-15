@@ -10,7 +10,7 @@ var search *tview.InputField
 func searchEvent(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEnter:
-		app.SetFocus(table)
+		tui.SetFocus(table)
 	}
 	return event
 }

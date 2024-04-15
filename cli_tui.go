@@ -4,39 +4,43 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/alctny/frieren-keeper/dao"
-	"github.com/alctny/frieren-keeper/model"
 	"github.com/rivo/tview"
-	"gorm.io/gorm"
+	"github.com/urfave/cli/v2"
 )
 
-var db *gorm.DB
-var app *tview.Application
+// var db *gorm.DB
+var tui *tview.Application
 var page *tview.Pages
-var data []model.Password
+var data []Password
 
 func Init() {
+	InitHit()
 	InitSearch()
 	InitForm()
-	InitHit()
 	InitTable()
-	app = tview.NewApplication()
+
+	tui = tview.NewApplication()
 	page = tview.NewPages()
-	db = dao.NewGormDB()
 
 	layout := tview.NewFlex().SetDirection(tview.FlexColumn)
 	rightFlex := tview.NewFlex().
-		AddItem(search, 3, 0, false).
 		SetDirection(tview.FlexRow).
+		AddItem(search, 3, 0, false).
 		AddItem(form, 0, 7, false).
 		AddItem(hit, 0, 3, false)
+	leftFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(table, 0, 1, true)
+
 	layout.
-		AddItem(table, 0, 7, false).
+		AddItem(leftFlex, 0, 7, false).
 		AddItem(rightFlex, 0, 3, false)
 	page.AddPage("main", layout, true, true)
+
+	db = NewGormDB()
 }
 
-func run() {
+func tuiStart(c *cli.Context) error {
 	Init()
 	tx := db.Find(&data)
 	if tx.Error != nil {
@@ -45,14 +49,12 @@ func run() {
 	}
 
 	SetTabelContent(data)
-	app.SetRoot(page, true).SetFocus(table)
-	err := app.Run()
+	tui.SetRoot(page, true).SetFocus(table)
+	err := tui.Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(0)
 	}
-}
 
-func main() {
-	run()
+	return nil
 }

@@ -1,21 +1,20 @@
-package dao
+package main
 
 import (
 	"fmt"
 	"os"
 	"os/user"
 
-	"github.com/alctny/frieren-keeper/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
 type DB interface {
-	Query(any, []model.Password) error
-	Updata(model.Password) error
-	Delete(model.Password) error
-	Insert(model.Password) error
+	Query(any, []Password) error
+	Updata(Password) error
+	Delete(Password) error
+	Insert(Password) error
 }
 
 func NewGormDB() *gorm.DB {
@@ -39,7 +38,7 @@ func NewGormDB() *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
-	err = db.AutoMigrate(&model.Password{})
+	err = db.AutoMigrate(&Password{})
 	if err != nil {
 		panic(err)
 	}

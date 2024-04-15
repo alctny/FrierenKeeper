@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/alctny/frieren-keeper/model"
-	"github.com/alctny/frieren-keeper/util"
 	"github.com/urfave/cli/v2"
 )
 
@@ -24,25 +22,25 @@ func add(ctx *cli.Context) error {
 	if keyFile != "" {
 		isEncrype = 1
 
-		password, err = util.EncrypeString(password, keyFile)
+		password, err = EncrypeString(password, keyFile)
 		if err != nil {
 			return err
 		}
 
-		loginId, err = util.EncrypeString(loginId, keyFile)
+		loginId, err = EncrypeString(loginId, keyFile)
 		if err != nil {
 			return err
 		}
 
 		if bind != "" {
-			bind, err = util.EncrypeString(bind, keyFile)
+			bind, err = EncrypeString(bind, keyFile)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	passwd := model.Password{
+	passwd := Password{
 		Name:     name,
 		LoginId:  loginId,
 		Password: password,

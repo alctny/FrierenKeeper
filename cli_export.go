@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/alctny/frieren-keeper/model"
 	"github.com/urfave/cli/v2"
 )
 
@@ -13,14 +12,14 @@ import (
 // TODO: export to csv
 func export2Csv(ctx *cli.Context) error {
 	keyFile := ctx.Path("key")
-	passwords := []model.Password{}
+	passwords := []Password{}
 	if keyFile != "" {
 		tx := db.Find(&passwords)
 		if tx.Error != nil {
 			return tx.Error
 		}
 		var err error
-		passwords, err = model.DecryptPasswords(passwords, keyFile)
+		passwords, err = DecryptPasswords(passwords, keyFile)
 		if err != nil {
 			return err
 		}

@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 
-	"github.com/alctny/frieren-keeper/dao"
 	"github.com/urfave/cli/v2"
 	"gorm.io/gorm"
 )
@@ -210,6 +209,11 @@ func init() {
 			Usage:  "generate password",
 			Action: generate,
 		},
+		{
+			Name:   "tui",
+			Usage:  "start with tui",
+			Action: tuiStart,
+		},
 	}
 
 	app.Version = VERSION
@@ -217,7 +221,7 @@ func init() {
 	app.EnableBashCompletion = true
 	app.Name = "gokeeper"
 	app.Authors = []*cli.Author{{Name: "Alctny", Email: "ltozvxe@gmail.com"}}
-	db = dao.NewGormDB()
+	db = NewGormDB()
 }
 
 func main() {
